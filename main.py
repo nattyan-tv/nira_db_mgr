@@ -68,8 +68,9 @@ NIRA Database Manager v1.0
 
 # 選択してください。
 1. データのJSON化
-2. データの移行
-3. 終了
+2. データのTXT化
+3. データの移行
+4. 終了
 """
         )
         c = input("> ")
@@ -128,6 +129,56 @@ with open("exports/n_fc.{i[:-5]}.json", "w") as f:
                 print(
                     """\
 # 選択してください。
+1. pickleデータ
+2. Google Spread Sheet
+3. HTTP_db
+4. 戻る
+"""
+                )
+                d = input("> ")
+                if not os.path.exists("exports"):
+                    os.mkdir("exports")
+                if d == "1":
+                    datas = os.listdir(BOT_DIR)
+                    print("# Loading files...")
+                    for i in datas:
+                        ib = os.path.join(BOT_DIR, i)
+                        if os.path.isfile(ib) and i[-5:] == ".nira":
+                            with open(ib, "rb") as f:
+                                print(f"n_fc.{i}", ib, sep="".join([" " for i in range(35-len(i))]))
+                                exec(f"n_fc.{i[:-5]} = pickle.load(f)")
+                                exec(f"""\
+with open("exports/n_fc.{i[:-5]}.txt", "w") as f:
+    f.write(str(n_fc.{i[:-5]}))
+""")
+                    print("# All function loaded.")
+                    print("# TXTファイル化は終了しました。[n_fc.*.txt]")
+                elif d == "2":
+                    print("# Loading cloud cells...")
+                    with open("exports/google.dissoku.txt", "w") as f:
+                        f.write(str(DB.readValue(DATABASE, "B4")))
+                    with open("exports/google.remind.txt", "w") as f:
+                        f.write(str(DB.readValue(DATABASE, "B5")))
+                    print("# All data pulled.")
+                    print("# TXTファイル化は終了しました。[google.*.txt]")
+                elif d == "3":
+                    print("# Connecting database server...")
+                    print(CLIENT.url)
+                    ALL_DATA = await CLIENT.get_all()
+                    for key, value in ALL_DATA.items():
+                        with open(f"exports/http_db.{key}.txt", "w") as f:
+                            f.write(str(value))
+                    print("# TXTファイル化は終了しました。[http_db.*.txt]")
+                elif d == "4":
+                    break
+                else:
+                    print("# 選択しなおしてください。")
+                    continue
+        elif c == "3":
+            while True:
+                print(
+                    """\
+# 選択してください。
 1. pickleデータ->HTTP_db
 2. Google Spread Sheet->HTTP_db
 3. 戻る
@@ -159,7 +210,7 @@ with open("exports/n_fc.{i[:-5]}.json", "w") as f:
                 else:
                     print("# 選択しなおしてください。")
                     continue
-        elif c == "3":
+        elif c == "4":
             print("# See you again...")
             return
         else:

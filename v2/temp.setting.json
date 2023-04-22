@@ -1,0 +1,5 @@
+{
+    "httpdb": "https://httpdb.com/db",
+    "mongodb": "mongodb://localhost:27017",
+    "mongodb_name": "nira-bot"
+}

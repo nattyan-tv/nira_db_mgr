@@ -1,5 +1,6 @@
 import asyncio
 import database
+import traceback
 
 from motor import motor_asyncio
 
@@ -14,12 +15,9 @@ class Database:
     client: HTTP_db.Client
     pulled_data: dict
 
-    def __init__(self, client: HTTP_db.Client, mongo_db, http_name = "", mongo = "", http_type = database.HttpDBType.SAME_VALUE, **kwargs):
+    def __init__(self, client: HTTP_db.Client, mongo_db, **kwargs):
         self.client = client # HTTP_dbのクライアント
-        self.http_name = http_name # HTTP_db用のドキュメント名
         self.mongo_db = mongo_db # MongoDBのデータベース（client["nira"]）
-        self.mongo = mongo # MongoDBのコレクション名
-        self.http_type = http_type # HTTP_dbのタイプ
 
     async def _pull(self):
         """Pull from database."""
@@ -28,21 +26,21 @@ class Database:
                 data = dict_list.listToDict(await self.client.get(self.http_name))
                 return data
             except Exception:
-                print("Error")
+                print("Error", traceback.format_exc())
                 return {}
         elif self.http_type == database.HttpDBType.GUILD_VALUE:
             try:
                 data = dict(await self.client.get(self.http_name))
                 return data
             except Exception:
-                print("Error")
+                print("Error", traceback.format_exc())
                 return {}
         elif self.http_type == database.HttpDBType.SAME_VALUE:
             try:
                 data = await self.client.get(self.http_name)
                 return data
             except Exception:
-                print("Error")
+                print("Error", traceback.format_exc())
                 return {}
 
     async def _push(self, d):
@@ -50,16 +48,21 @@ class Database:
 
     async def main(self):
         self.pulled_data = await self._pull()
-        await self._push(self.conv(self.pulled_data))
+        if len(self.pulled_data) == 0:
+            print("Skip (NOT STORED)")
+            return
+        conved = self.conv(self.pulled_data)
+        if len(conved) == 0:
+            print("Skip (CONVERTED)")
+            return
+        await self._push(conved)
 
     def conv(self, v: dict) -> list:
         raise NotImplementedError
 
 
-    def nlong(self, number: int) -> dict[str, str]:
-        return {
-            "$numberLong": str(number)
-        }
+    def nlong(self, number: int):
+        return number
 
     def asLong(self, value: int | str) -> str | int | dict[str, str]:
         if isinstance(value, str):
@@ -78,7 +81,16 @@ class GuildValue(Database):
     http_type: database.HttpDBType = database.HttpDBType.GUILD_VALUE
     value: str
 
-    def __init__(self, client, mongo_db, http_name = "", mongo = "", http_type = database.HttpDBType.GUILD_VALUE, value = "", **kwargs):
+    def __init__(
+            self,
+            client,
+            mongo_db,
+            http_name = "",
+            mongo = "",
+            http_type = database.HttpDBType.GUILD_VALUE,
+            value = "",
+            **kwargs
+        ):
         self.client = client
         self.mongo_db = mongo_db
         self.http_name = http_name
@@ -158,21 +170,24 @@ class Minecraft(Database):
     def conv(self, v):
         result = []
         for key, value in v.items():
-            r = {"guild_id": self.nlong(key)}
             for c, vl in value.items():
                 if c == "value":
-                    r["value"] = vl
+                    continue
                 else:
-                    r["name"] = vl[0]
-                    r["host"] = vl[1].split(":", 1)[0]
-                    r["port"] = vl[1].split(":", 1)[1]
-                    r["server_type"] = vl[2]
-                    r["server_id"] = int(c)
-            result.append(r)
+                    result.append(
+                        {
+                            "guild_id": self.nlong(key),
+                            "name": vl[0],
+                            "host": vl[1].split(":", 1)[0],
+                            "port": int(vl[1].split(":", 1)[1]),
+                            "server_type": vl[2],
+                            "server_id": int(c)
+                        }
+                    )
         return result
 
 class Mod(Database):
-    http_name: str = "mod"
+    http_name: str = "mod_data"
     mongo: str = "mod"
     http_type: database.HttpDBType = database.HttpDBType.CHANNEL_VALUE
 
@@ -197,7 +212,7 @@ class Pin(Database):
 
 class ExReaction(Database):
     http_name: str = "ex_reaction_list"
-    mongo: str = "remind_data"
+    mongo: str = "ex_reaction"
     http_type: database.HttpDBType = database.HttpDBType.CHANNEL_VALUE
 
     def conv(self, v):
@@ -234,21 +249,21 @@ class Remind(Database):
 
     async def _pull(self):
         if not await self.client.exists(self.http_name):
-            return
+            return {}
         try:
             TEMP_DATA = await self.client.get(self.http_name)
             if TEMP_DATA == []:
-                self.pulled_data = {}
-                return True
-            self.pulled_data = {i[0]: {i[1][0]: i[1][1]} for i in TEMP_DATA}
+                return {}
+            return {i[0]: {i[1][0]: i[1][1]} for i in TEMP_DATA}
         except Exception as err:
             print(err)
-            self.pulled_data = {}
+            return {}
 
     def conv(self, v):
         result = []
         for key, value in v.items():
-            result.append({"channel_id": self.nlong(key), "time": value[0], "message": value[1]})
+            for time, content in value.items():
+                result.append({"channel_id": self.nlong(key), "time": time, "content": content})
         return result
 
 class SteamServer(Database):
@@ -271,7 +286,7 @@ class SteamServer(Database):
                     else:
                         r[n]["sv_nm"] = mesd
                         result.append(r[n])
-                elif t == "re":
+                elif t == "ad":
                     if n not in r:
                         r[n] = {"guild_id": self.nlong(key), "sv_ad": mesd, "server_id": int(n)}
                     else:
@@ -335,6 +350,6 @@ class RoleKeeper(Database):
         for guild, settings in v.items():
             r = {"guild_id": self.nlong(guild)}
             for user, roles in settings.items():
-                r[user if user != "rk" else "setting"] = roles
+                r[str(user) if user != "rk" else "setting"] = roles
             result.append(r)
         return result

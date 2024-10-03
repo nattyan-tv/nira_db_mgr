@@ -1,0 +1,4 @@
+{
+    "database_url": DB_URL,
+    "database_name": DB_NAME
+}

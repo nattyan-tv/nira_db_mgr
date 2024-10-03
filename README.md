@@ -10,6 +10,9 @@ Nira bot database manager.
 - v2  
   HTTP_dbでのデータ保存からMongoDBへの変換 を行う際に使用するデータベース管理プログラム
 
+- v3  
+  MongoDBでの`nr_setting`、`ar_setting`を新しい形式の`nr_setting`に変換するプログラム
+
 # How to use
 ## v2
 1. `cd ./v2`とかして、`./v2`をワーキングディレクトリにします。  
